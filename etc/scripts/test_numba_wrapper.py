@@ -27,6 +27,8 @@ import argparse
 import inspect
 import io
 import os
+import pathlib
+import subprocess
 import sys
 import unittest
 import unittest.mock
@@ -48,6 +50,7 @@ class TestMain(unittest.TestCase):
                 return_value=argparse.Namespace(
                     inputfile=source,
                     outputfile=output_file.name,
+                    dump_passes=False,
                 ),
             ),
         ):
@@ -62,11 +65,56 @@ class TestMain(unittest.TestCase):
             unittest.mock.patch.object(
                 argparse.ArgumentParser,
                 "parse_args",
-                return_value=argparse.Namespace(inputfile="test", outputfile=None),
+                return_value=argparse.Namespace(inputfile="test", outputfile=None, dump_passes=False),
             ),
         ):
             numba_wrapper.main()
         self.assertEqual(mock.call_args.kwargs["writer"], sys.stdout)
+
+
+class TestDumpPasses(unittest.TestCase):
+    def run_wrapper(self, source, output, *options):
+        return subprocess.run(
+            [sys.executable, "-I", numba_wrapper.__file__, "--inputfile", str(source),
+             "--outputfile", str(output), *options],
+            capture_output=True, text=True, check=False, timeout=30,
+        )
+
+    def test_dump_passes_ignores_cached_code_and_preserves_assembly(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = pathlib.Path(directory) / "example.py"
+            output = pathlib.Path(directory) / "output.s"
+            source.write_text(
+                "import numba\n"
+                "@numba.njit('int64(int64)', cache=True)\n"
+                "def square(x):\n"
+                "    return x * x\n"
+            )
+            compiled = self.run_wrapper(source, output)
+            self.assertEqual(compiled.returncode, 0, compiled.stderr)
+            self.assertNotIn("AFTER translate_bytecode", compiled.stdout)
+            self.assertTrue(list(pathlib.Path(directory).rglob("*.nbc")))
+            assembly = output.read_text()
+            files = set(pathlib.Path(directory).rglob("*"))
+
+            dumped = self.run_wrapper(source, output, "--dump-passes")
+            self.assertEqual(dumped.returncode, 0, dumped.stderr)
+            self.assertIn("BEFORE translate_bytecode", dumped.stdout)
+            self.assertIn("AFTER translate_bytecode", dumped.stdout)
+            self.assertIn("x = arg(0, name=x)", dumped.stdout)
+            self.assertEqual(output.read_text(), assembly)
+            self.assertEqual(set(pathlib.Path(directory).rglob("*")), files)
+
+    def test_dump_passes_reports_errors_and_cleans_up(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = pathlib.Path(directory) / "example.py"
+            output = pathlib.Path(directory) / "output.s"
+            source.write_text("raise ValueError('bad source')\n")
+            dumped = self.run_wrapper(source, output, "--dump-passes")
+            self.assertEqual(dumped.returncode, 255)
+            self.assertIn("ValueError: bad source", dumped.stderr)
+            files = {path.name for path in pathlib.Path(directory).iterdir()}
+            self.assertEqual(files - {"__pycache__"}, {source.name})
 
 
 class TestWriteModuleAsm(unittest.TestCase):

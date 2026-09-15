@@ -22,11 +22,14 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+import type {CompilationResult} from '../../types/compilation/compilation.interfaces.js';
+import type {OptPipelineBackendOptions} from '../../types/compilation/opt-pipeline-output.interfaces.js';
 import type {PreliminaryCompilerInfo} from '../../types/compiler.interfaces.js';
 import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
 import {BaseCompiler} from '../base-compiler.js';
 import {CompilationEnvironment} from '../compilation-env.js';
 import {AsmParser} from '../parsers/asm-parser.js';
+import {NumbaPassDumpParser} from '../parsers/numba-pass-dump-parser.js';
 import {resolvePathFromAppRoot} from '../utils.js';
 import {BaseParser} from './argument-parsers.js';
 
@@ -41,6 +44,12 @@ export class NumbaCompiler extends BaseCompiler {
         super(compilerInfo, env);
         this.compilerWrapperPath =
             this.compilerProps('compilerWrapper', '') || resolvePathFromAppRoot('etc', 'scripts', 'numba_wrapper.py');
+        this.compiler.optPipeline = {
+            arg: ['--dump-passes'],
+            supportedOptions: [],
+            supportedFilters: [],
+            monacoLanguage: 'python',
+        };
     }
 
     override async processAsm(result, filters, options: string[]) {
@@ -79,6 +88,19 @@ export class NumbaCompiler extends BaseCompiler {
             item.text = line;
         }
         return result;
+    }
+
+    override generateOptPipeline(
+        inputFilename: string,
+        options: string[],
+        filters: ParseFiltersAndOutputOptions,
+        _optPipelineOptions: OptPipelineBackendOptions,
+    ) {
+        return super.generateOptPipeline(inputFilename, options, filters, {});
+    }
+
+    override async processOptPipeline(output: CompilationResult) {
+        return new NumbaPassDumpParser().process(output.stdout);
     }
 
     override optionsForFilter(filters: ParseFiltersAndOutputOptions, outputFilename: string): string[] {

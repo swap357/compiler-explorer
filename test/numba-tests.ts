@@ -22,12 +22,16 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {beforeAll, describe, expect, it} from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+
+import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 
 import type {CompilationEnvironment} from '../lib/compilation-env.js';
 import {BaseParser} from '../lib/compilers/argument-parsers.js';
 import {decode_symbols, NumbaCompiler} from '../lib/compilers/numba.js';
 import type {AsmResultSource} from '../types/asmresult/asmresult.interfaces.js';
+import type {UnprocessedExecResult} from '../types/execution/execution.interfaces.js';
 import type {LanguageKey} from '../types/languages.interfaces.js';
 import {makeCompilationEnvironment, makeFakeCompilerInfo} from './utils.js';
 
@@ -76,6 +80,66 @@ describe('Numba', () => {
         expect(i_outputfile).not.toEqual(-1);
         expect(options[i_outputfile + 1]).toEqual(outputFilename);
         expect(options.at(-1)!).toEqual('--inputfile');
+    });
+
+    describe('optimization pipeline', () => {
+        const execution: UnprocessedExecResult = {
+            code: 0,
+            stdout: fs.readFileSync(new URL('numba/passes.txt', import.meta.url), 'utf8'),
+            stderr: '',
+            okToCache: true,
+            filenameTransform: filename => filename,
+            execTime: 1,
+            timedOut: false,
+            truncated: false,
+        };
+
+        afterEach(() => vi.restoreAllMocks());
+
+        it('uses the wrapper mode and ignores LLVM-specific options', async () => {
+            const compiler = new NumbaCompiler(makeFakeCompilerInfo(info), ce);
+            const exec = vi.spyOn(compiler, 'exec').mockResolvedValue(execution);
+            const input = path.resolve('example.py');
+            const args = [...compiler.optionsForFilter({}, path.resolve('output.s')), input];
+            const result = await compiler.generateOptPipeline(
+                input,
+                args,
+                {},
+                {
+                    fullModule: true,
+                    noDiscardValueNames: true,
+                    demangle: true,
+                },
+            );
+            expect(exec).toHaveBeenCalledExactlyOnceWith(
+                'none',
+                [...args, '--dump-passes'],
+                expect.objectContaining({
+                    customCwd: path.dirname(input),
+                }),
+            );
+            expect(args).not.toContain('--dump-passes');
+            expect(result?.error).toBeUndefined();
+            expect(result?.compilationOptions).toEqual([...args, '--dump-passes']);
+            expect(result?.results['<dynamic>.square (nopython)']).toHaveLength(3);
+            expect(compiler.compiler.optPipeline).toMatchObject({
+                supportedOptions: [],
+                supportedFilters: [],
+                monacoLanguage: 'python',
+            });
+        });
+
+        it.each([
+            [{code: 255, stderr: 'ValueError: bad source'}, 'ValueError: bad source'],
+            [{code: -1, timedOut: true}, 'Invocation timed out'],
+            [{code: -1, truncated: true}, 'Exceeded max output limit'],
+        ])('reports invocation failures (%j)', async (failure, error) => {
+            const compiler = new NumbaCompiler(makeFakeCompilerInfo(info), ce);
+            vi.spyOn(compiler, 'exec').mockResolvedValue({...execution, ...failure});
+            const result = await compiler.generateOptPipeline('example.py', [], {}, {});
+            expect(result?.error).toContain(error);
+            expect(result?.results).toEqual({});
+        });
     });
 
     it('processing should filter and add line numbers', async () => {

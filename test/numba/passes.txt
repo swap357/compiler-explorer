@@ -1,0 +1,36 @@
+---------------------------------<dynamic>.square: nopython: BEFORE translate_bytecode----------------------------------
+func_ir is None
+----------------------------------<dynamic>.square: nopython: AFTER translate_bytecode----------------------------------
+label 0:
+    x = arg(0, name=x)                       ['x']
+    $binop_mul8.2 = x * x                    ['$binop_mul8.2', 'x', 'x']
+    $12return_value.3 = cast(value=$binop_mul8.2) ['$12return_value.3', '$binop_mul8.2']
+    return $12return_value.3                 ['$12return_value.3']
+
+-------------------------------------<dynamic>.square: nopython: BEFORE fixup_args--------------------------------------
+label 0:
+    x = arg(0, name=x)                       ['x']
+    $binop_mul8.2 = x * x                    ['$binop_mul8.2', 'x', 'x']
+    $12return_value.3 = cast(value=$binop_mul8.2) ['$12return_value.3', '$binop_mul8.2']
+    return $12return_value.3                 ['$12return_value.3']
+
+--------------------------------------<dynamic>.square: nopython: AFTER fixup_args--------------------------------------
+label 0:
+    x = arg(0, name=x)                       ['x']
+    $binop_mul8.2 = x * x                    ['$binop_mul8.2', 'x', 'x']
+    $12return_value.3 = cast(value=$binop_mul8.2) ['$12return_value.3', '$binop_mul8.2']
+    return $12return_value.3                 ['$12return_value.3']
+
+------------------------------------<dynamic>.square: nopython: BEFORE ir_processing------------------------------------
+label 0:
+    x = arg(0, name=x)                       ['x']
+    $binop_mul8.2 = x * x                    ['$binop_mul8.2', 'x', 'x']
+    $12return_value.3 = cast(value=$binop_mul8.2) ['$12return_value.3', '$binop_mul8.2']
+    return $12return_value.3                 ['$12return_value.3']
+
+------------------------------------<dynamic>.square: nopython: AFTER ir_processing-------------------------------------
+label 0:
+    x = arg(0, name=x)                       ['x']
+    $binop_mul8.2 = x * x                    ['$binop_mul8.2', 'x', 'x']
+    $12return_value.3 = cast(value=$binop_mul8.2) ['$12return_value.3', '$binop_mul8.2']
+    return $12return_value.3                 ['$12return_value.3']
