@@ -75,7 +75,7 @@ class TestMain(unittest.TestCase):
 class TestDumpPasses(unittest.TestCase):
     def run_wrapper(self, source, output, *options):
         return subprocess.run(
-            [sys.executable, "-I", numba_wrapper.__file__, "--inputfile", str(source),
+            [sys.executable, numba_wrapper.__file__, "--inputfile", str(source),
              "--outputfile", str(output), *options],
             capture_output=True, text=True, check=False, timeout=30,
         )
