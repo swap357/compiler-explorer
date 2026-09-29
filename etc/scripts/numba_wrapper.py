@@ -27,10 +27,13 @@ import argparse
 import contextlib
 import importlib.util
 import inspect
+import os
 import sys
+import tempfile
 import traceback
 from typing import TYPE_CHECKING, TextIO
 
+from numba.core import config
 from numba.core.dispatcher import Dispatcher
 
 if TYPE_CHECKING:
@@ -45,13 +48,24 @@ def main() -> None:
     )
     parser.add_argument("--inputfile", required=True)
     parser.add_argument("--outputfile")  # if not provided, we default to stdout
+    parser.add_argument("--dump-passes", action="store_true", help="Dump Numba IR before and after each pass")
     args = parser.parse_args()
 
-    with (
-        _handle_exceptions(),
-        _open_or_stdout(args.outputfile) as writer,
-    ):
-        _write_module_asm(path=args.inputfile, writer=writer)
+    with _handle_exceptions():
+        if args.dump_passes:
+            _dump_passes(path=args.inputfile)
+        else:
+            with _open_or_stdout(args.outputfile) as writer:
+                _write_module_asm(path=args.inputfile, writer=writer)
+
+
+def _dump_passes(*, path: str) -> None:
+    # A fresh cache prevents cache=True from skipping the compilation passes.
+    with tempfile.TemporaryDirectory(dir=os.path.dirname(path)) as directory:
+        os.environ["NUMBA_CACHE_DIR"] = directory
+        os.environ["NUMBA_DEBUG_PRINT_WRAP"] = "all"
+        config.reload_config()
+        _load_module(path=path)
 
 
 def _write_module_asm(*, path: str, writer: TextIO) -> None:
